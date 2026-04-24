@@ -1,0 +1,26 @@
+{
+  "classifier": {
+    "algo": "logistic",
+    "metric": 0.3246757394543592,
+    "path": "C:\\Users\\User\\Desktop\\ARIAN\\models\\wildfire\\classifier\\logistic.joblib",
+    "metrics": {
+      "ROC_AUC": 0.7896264108887413,
+      "PR_AUC": 0.3246757394543592,
+      "best_threshold": 0.48755451150607537,
+      "F1_at_best": 0.3730715287513399,
+      "n": 1830,
+      "positive_rate": 0.11366120218579236
+    }
+  },
+  "regressor": {
+    "algo": "ridge",
+    "metric": 0.2673590118149369,
+    "path": "C:\\Users\\User\\Desktop\\ARIAN\\models\\wildfire\\regressor\\ridge.joblib",
+    "metrics": {
+      "MAE": 0.2673590118149369,
+      "RMSE": 0.690972570928104,
+      "spearman": 0.3196613907166317,
+      "n": 1830
+    }
+  }
+}

@@ -219,6 +219,7 @@ def add_heatwave_indicator(
     group_col: str = "City",
     percentile: float = HOT_DAY_PERCENTILE,
     min_consecutive: int = HEATWAVE_MIN_DAYS,
+    train_end_date: Optional[str] = None,
 ) -> pd.DataFrame:
     """Append two heatwave features:
 
@@ -226,10 +227,9 @@ def add_heatwave_indicator(
     - ``heatwave_active`` : 1 if today is part of a run of >= ``min_consecutive``
       consecutive ``hot_day == 1`` days.
 
-    The percentile threshold is computed **once from the training history**
-    (whatever is passed in), so future rows (forecast) are compared against
-    the same threshold. This is a deliberate choice: we don't want the
-    threshold to shift as new forecasts arrive.
+    The percentile threshold is computed **only from rows before
+    train_end_date** to prevent data leakage into the test set.
+    If *train_end_date* is None, all rows are used (backward compat).
     """
     if temp_col not in df.columns:
         logger.warning("Skipping heatwave: %s missing", temp_col)
@@ -242,9 +242,12 @@ def add_heatwave_indicator(
     thresholds: Dict[str, float] = {}
 
     for city, g in df.groupby(group_col, sort=False):
-        # Threshold from historical rows only (date < today's max by default
-        # here we use all rows that pass, which in training == history)
-        vals = g[temp_col].dropna().values
+        # FIX: compute percentile on training data only
+        if train_end_date is not None:
+            train_mask = g["date"] < pd.Timestamp(train_end_date)
+            vals = g.loc[train_mask, temp_col].dropna().values
+        else:
+            vals = g[temp_col].dropna().values
         if len(vals) == 0:
             continue
         thr = float(np.percentile(vals, percentile))
@@ -262,8 +265,10 @@ def add_heatwave_indicator(
 
     df["hot_day"] = hot
     df["heatwave_active"] = heatwave
-    logger.info("Heatwave thresholds (p%d): %s",
-                int(percentile), {k: round(v, 2) for k, v in thresholds.items()})
+    logger.info("Heatwave thresholds (p%d%s): %s",
+                int(percentile),
+                f", train<{train_end_date}" if train_end_date else "",
+                {k: round(v, 2) for k, v in thresholds.items()})
     return df
 
 
@@ -368,7 +373,8 @@ def add_fuel_dryness(
     df = df.rename(columns={"NDVI": "ndvi"})
 
     # Forward-fill NDVI per city (daily NDVI can be cloudy/missing)
-    df["ndvi"] = df.groupby(group_col)["ndvi"].transform(lambda s: s.ffill().bfill())
+    # NOTE: bfill() removed to prevent look-ahead data leakage
+    df["ndvi"] = df.groupby(group_col)["ndvi"].transform(lambda s: s.ffill())
     df["ndvi_anomaly"] = df["ndvi"] - df["ndvi_clim"]
     df = df.drop(columns=["doy", "ndvi_clim"])
 
@@ -386,11 +392,15 @@ def add_human_activity(
     roads: pd.DataFrame,
     population: pd.DataFrame,
     group_col: str = "City",
+    train_end_date: Optional[str] = None,
 ) -> pd.DataFrame:
     """Join static per-city road density and per-year population density.
 
     Output adds ``human_access_road_meters``, ``pop_density``, and
     ``human_activity_score`` (log-normalised product, unitless).
+
+    If *train_end_date* is given, the z-score standardisation uses only
+    rows before that date to prevent leakage.
     """
     df = df.copy()
     df["year"] = pd.to_datetime(df["date"]).dt.year
@@ -415,8 +425,15 @@ def add_human_activity(
     rd_log = np.log1p(df["human_access_road_meters"].fillna(0))
     pd_log = np.log1p(df["pop_density"].fillna(0))
     combo = rd_log * pd_log
-    std = combo.std() or 1.0
-    df["human_activity_score"] = ((combo - combo.mean()) / std).astype(np.float32)
+    # FIX: use train-only statistics for z-score to prevent leakage
+    if train_end_date is not None:
+        train_mask = df["date"] < pd.Timestamp(train_end_date)
+        mu = combo[train_mask].mean()
+        std = combo[train_mask].std() or 1.0
+    else:
+        mu = combo.mean()
+        std = combo.std() or 1.0
+    df["human_activity_score"] = ((combo - mu) / std).astype(np.float32)
 
     df = df.drop(columns=["year"])
     logger.info("Added human_access_road_meters, pop_density, human_activity_score")
@@ -553,8 +570,14 @@ def build_wildfire_features(
 
     # --- Derived fire-science features ---
     df = add_drought_index(df)
-    df = add_heatwave_indicator(df)
+    df = add_heatwave_indicator(df, train_end_date="2024-01-01")
     df = add_wind_spread_factor(df)
+
+    # --- Wind direction sin/cos (fix: raw degrees unusable by linear models) ---
+    if "wind_direction_10m" in df.columns:
+        _rad = np.deg2rad(df["wind_direction_10m"])
+        df["wind_dir_sin"] = np.sin(_rad).astype(np.float32)
+        df["wind_dir_cos"] = np.cos(_rad).astype(np.float32)
 
     # --- NDVI ---
     try:
@@ -572,7 +595,7 @@ def build_wildfire_features(
         pop = pd.read_csv(population_path)
     except FileNotFoundError:
         pop = pd.DataFrame(columns=["City", "Year", "Pop_Density"])
-    df = add_human_activity(df, roads, pop)
+    df = add_human_activity(df, roads, pop, train_end_date="2024-01-01")
 
     # --- Lightning ---
     try:

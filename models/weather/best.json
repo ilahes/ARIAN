@@ -9,7 +9,7 @@
       "n": 2360,
       "MAPE_pct": 35.868450183559325
     },
-    "model_path": "/var/home/manheim666/Desktop/ARIAN/models/weather/temperature_2m/hgbr.joblib"
+    "model_path": "C:\\Users\\User\\Desktop\\ARIAN\\models\\weather\\temperature_2m\\hgbr.joblib"
   },
   "wind_speed_10m": {
     "algo": "hgbr",
@@ -21,7 +21,7 @@
       "n": 2360,
       "MAPE_pct": 36.2797103808868
     },
-    "model_path": "/var/home/manheim666/Desktop/ARIAN/models/weather/wind_speed_10m/hgbr.joblib"
+    "model_path": "C:\\Users\\User\\Desktop\\ARIAN\\models\\weather\\wind_speed_10m\\hgbr.joblib"
   },
   "wind_direction_10m": {
     "algo": "hgbr",
@@ -33,7 +33,7 @@
       "n": 2360,
       "circular_MAE_deg": 78.13464403053167
     },
-    "model_path": "/var/home/manheim666/Desktop/ARIAN/models/weather/wind_direction_10m/hgbr.joblib"
+    "model_path": "C:\\Users\\User\\Desktop\\ARIAN\\models\\weather\\wind_direction_10m\\hgbr.joblib"
   },
   "rain": {
     "algo": "hgbr",
@@ -44,7 +44,7 @@
       "R2": 0.14162859786670923,
       "n": 2360
     },
-    "model_path": "/var/home/manheim666/Desktop/ARIAN/models/weather/rain/hgbr.joblib"
+    "model_path": "C:\\Users\\User\\Desktop\\ARIAN\\models\\weather\\rain\\hgbr.joblib"
   },
   "precipitation": {
     "algo": "hgbr",
@@ -55,6 +55,6 @@
       "R2": 0.1538661720926926,
       "n": 2360
     },
-    "model_path": "/var/home/manheim666/Desktop/ARIAN/models/weather/precipitation/hgbr.joblib"
+    "model_path": "C:\\Users\\User\\Desktop\\ARIAN\\models\\weather\\precipitation\\hgbr.joblib"
   }
 }
