@@ -1,207 +1,356 @@
-# wildfire prediction
+# ARIAN — Azerbaijan Regional Intelligence for Atmospheric & Wildfire Networks
 
-> **ARIAN — Azerbaijani Risk Intelligence and Analysis Network**
-> Production-grade wildfire risk and weather forecasting system for 16 Azerbaijani cities.
-> 30-day probabilistic forecasts · Calibrated fire probability · Climate anomaly detection · REST API
+> **End-to-end wildfire risk intelligence pipeline for 16 Azerbaijani cities.**
+> Four sequential Jupyter notebooks covering data ingestion, exploratory analysis, weather forecasting, and wildfire prediction — producing interactive geospatial risk maps and automated hypothesis reports.
 
----
-
-## Problem Statement
-
-Azerbaijan sits at the intersection of three distinct climate zones — semi-arid lowlands, a humid subtropical Caspian coast, and alpine Caucasus highlands — making it both ecologically significant and disproportionately fire-prone. Temperatures have risen **+0.4 °C/decade** since 1980 while summer precipitation declines, dramatically increasing wildfire risk across the Greater and Lesser Caucasus (≈1.2 M ha of commercial forest). The Baku–Absheron peninsula and the Kura-Araz lowlands experience extreme summer drought annually, while highland forests face prolonged dry spells with no natural firebreak management. Despite these conditions, **no regional 30-day fire-risk forecast exists for Azerbaijan**.
-
-ARIAN addresses this gap by integrating satellite imagery, multi-source meteorological archives, and the Azerbaijani State Forest Management Inventory (MESE QURULUSU) into a unified ML pipeline that delivers daily wildfire probability scores, expected fire counts, and multi-target 30-day weather forecasts across 16 Azerbaijani cities.
+Runs identically on **Google Colab** and **local environments** (JupyterLab / VS Code) with zero configuration changes.
 
 ---
 
-## Team & Roles
+## Table of Contents
 
-| Member | Owns | Phases | Key Responsibilities |
-|--------|------|--------|----------------------|
-| **Raul** | Data Collection + Wildfire Modeling | 1, 4 | Fetches all raw data (Open-Meteo, FIRMS, ESA, WorldPop, MESE QURULUSU); builds ingestion pipeline & DuckDB schema; computes FWI & SPEI; trains wildfire classifier (`fire_occurred`) and Poisson regressor (`fire_count`) |
-| **Aysu** | Weather Forecasting + API Backend | 2, 5 | Weather feature engineering (lags, rolling windows, sin/cos wind decomposition); trains HGBR forecast models per horizon across all 5 targets; builds FastAPI application and `/weather` endpoint |
-| **Ilaha** | EDA + Model Evaluation | 2, 4 | Data cleaning and distribution diagnostics; wildfire model calibration curves, precision-recall curves, threshold optimization; per-city performance breakdown reports |
-| **Asif** | Feature Engineering + Climate Analysis + API Routes | 3, 4, 5 | Computes FWI features; spatial joins of MESE QURULUSU forest inventory to 50 km city buffers; Mann-Kendall climate trend analysis; builds `/wildfire` and `/insights` API routes |
-| **Nurana** | EDA + Frontend | 2, 5 | Cross-city EDA; horizon interpolation validation; dashboard UX design; `/health` endpoint; end-to-end integration testing |
-
----
-
-## Daily Activities
-
-| Date | Member | Description |
-|------|--------|-------------|
-| 2026-04-20 | All Team | Project kick-off; repo structure set up, Open-Meteo API explored, 16 cities and target variables selected. |
-| 2026-04-21 | Raul | Data ingestion pipeline built; full Open-Meteo historical fetch (hourly + daily, 2020–present) for all 16 cities completed. |
-| 2026-04-22 | Raul | Database design finalized; DuckDB schema implemented, raw data loaded and validated. |
-| 2026-04-23 | Aysu / Ilaha / Nurana | Data cleaning pipeline applied; feature engineering (lags, rolling windows, heatwave flag) completed for weather data. |
-| 2026-04-24 | Raul | Pipeline automation complete; orchestrator (`generate_data.py`) with incremental loading, quality gates, and logging operational. |
-| 2026-04-25 | Asif | ARIAN v3.1 blueprint finalized; all Tier-0 datasets confirmed collected (Open-Meteo, FIRMS, ESA WorldCover, WorldPop, OSM, Azerbaycan.kmz, MESE QURULUSU). |
-| 2026-04-27 | All Team | README restructured: Team & Roles updated with clear ownership table; EDA phase (Day 6) begins. |
-| 2026-04-27 | All Team | README professionalized: added geographic problem context, problem-solution mapping table, dataset catalog, pipeline architecture overview, extended feature roadmap, FWI/SPEI interpretation, model performance targets, evaluation protocol, and Quick Start guide. |
+1. [Project Overview](#1-project-overview)
+2. [Team & Task Allocation](#2-team--task-allocation)
+3. [10-Day Project Timeline](#3-10-day-project-timeline)
+4. [Pipeline Architecture](#4-pipeline-architecture)
+5. [Notebook Descriptions](#5-notebook-descriptions)
+6. [Folder Structure](#6-folder-structure)
+7. [Setup & Execution](#7-setup--execution)
+8. [Dependencies](#8-dependencies)
+9. [Cities Covered](#9-cities-covered)
+10. [Data Sources & Provenance](#10-data-sources--provenance)
+11. [Key Outputs & Deliverables](#11-key-outputs--deliverables)
 
 ---
 
-## Why It Matters
+## 1. Project Overview
 
-Wildfire incidents have increased measurably since 2010. The 2021–2022 fire seasons alone caused substantial forest loss across the Greater and Lesser Caucasus, with the national forest estate (≈1.2 M hectares) at sustained risk. Early-warning forecasts give emergency services **7–14 days of operational lead time** to pre-position firefighting resources and issue timely civilian evacuation orders, directly reducing the estimated **~$70–80 M/year** in economic losses from extreme weather events in Azerbaijan.
+**ARIAN** builds a complete data science pipeline that:
 
-| Problem | ARIAN Solution |
-|---------|----------------|
-| No regional-scale 30-day weather forecast | ML ensemble trained on 6+ years of hourly Open-Meteo archive data |
-| Wildfire risk assessments are reactive, not predictive | Calibrated 30-day forward fire probability using fire-science features (FWI, drought) |
-| No early-warning system for high-risk fire windows | Canadian FWI system + SPEI drought indices provide 7–14 day structural lead time |
-| Climate trend reports require GIS expertise | Automated Mann-Kendall + Theil-Sen trend analysis per city, output to CSV |
-| Operational data scattered across agencies | Single REST API (FastAPI) aggregates weather, wildfire risk, and climate insights |
-| No structured forest inventory for fire risk zoning | MESE QURULUSU provides stand-level species, crown density, and age class per polygon |
+- **Ingests** multi-source data: Open-Meteo weather APIs (historical + forecast), NASA FIRMS satellite fire detections (MODIS C6.1, VIIRS C2), and Open-Elevation terrain data
+- **Explores & engineers** 90+ features through city-by-city statistical analysis, FWI indices, lag/rolling aggregates, and cyclical time encodings
+- **Forecasts** 9 weather variables hourly over a 30-day horizon using a Prophet × SARIMA × XGBoost stacking ensemble (144 model bundles: 16 cities × 9 features)
+- **Predicts** hourly wildfire risk probabilities using a calibrated XGBoost classifier trained on 2M+ hourly observations
+- **Generates** automated hypothesis reports comparing projected conditions against historical baselines
+- **Visualizes** results through interactive Folium risk maps, Plotly dashboards, and city-level timelines
 
 ---
 
-## Target
+## 2. Team & Task Allocation
 
-| Variable | Type | Definition |
-|----------|------|------------|
-| **`fire_occurred`** | Binary (0/1) | 1 if ≥1 NASA FIRMS VIIRS-SNPP hotspot falls within 50 km of city centroid on forecast date. Label window: next-day 00:00–23:59 local time. |
-| **`fire_count`** | Non-negative integer | Expected number of FIRMS hotspots in the same 50 km buffer; modelled with Poisson regression to enforce non-negative predictions. |
+| Team Member | Role | Assigned Tasks |
+|---|---|---|
+| **Asif Habilov** | Data Ingestion / Data Analysis / ML Engineering | T1 — Data ingestion pipeline (NB1); T5 — XGBoost fire classifier & calibration (NB4); T8 — ML model optimization & evaluation |
+| **Raul Ibrahimov** | Data Ingestion / Presentation Design | T2 — Fire label normalization & static geography (NB1); T10 — Presentation design & delivery; T11 — Documentation & README |
+| **Ilaha Shafizada** | Data Analysis / Feature Engineering | T3 — Exploratory data analysis (NB2 §1–§5); T6 — FWI & lag feature engineering (NB2 §7); T9 — Outlier detection & data quality |
+| **Nurana Aliyarli** | Data Analysis / Feature Engineering | T4 — Fire-weather relationship analysis (NB2 §6); T7 — Calendar & rolling feature engineering (NB2 §7); T9 — Outlier detection & data quality |
+| **Aysu Mammadova** | Data Analysis / ML Engineering | T5 — Weather forecasting ensemble (NB3); T8 — Wildfire prediction & hypothesis testing (NB4); T12 — Geospatial visualization |
 
-**Label construction:** VIIRS-SNPP hotspots (~375 m resolution) are spatially joined to per-city 50 km circular buffers. Each (city, date) pair receives a binary fire label and a raw hotspot count. Both targets are computed before any feature engineering to prevent leakage.
+### Task Breakdown
 
----
-
-## Features
-
-### Core Features (Available Now — Collected Data)
-
-| Source | Name | Units | Aggregation |
-|--------|------|-------|-------------|
-| Open-Meteo | `temperature_2m` | °C | daily mean; lags 1 / 3 / 7 / 14 d |
-| Open-Meteo | `wind_speed_10m` | m/s | daily mean; lags 1 / 3 / 7 / 14 d |
-| Open-Meteo | `relative_humidity_2m` | % | daily mean; lags 1 / 3 / 7 / 14 d |
-| Open-Meteo | `precipitation_7d_sum` | mm | rolling 7-day sum |
-| Open-Meteo | `rain_30d_sum` | mm | rolling 30-day sum |
-| Open-Meteo | `heatwave_flag` | binary | 3+ consecutive days above local p90 |
-| FWI (computed) | `fwi`, `ffmc`, `dc`, `dsr` | — | daily value derived from Open-Meteo inputs |
-| SPEI (computed) | `spei_3`, `spi_1` | σ | 3-month / 1-month standardized anomaly |
-| ESA WorldCover | `land_cover_class` | class | dominant land cover class in 50 km buffer |
-| AZ Forest Boundary | `forest_fraction` | fraction | forest area / buffer area (from Azerbaycan.kmz) |
-| MESE QURULUSU | `dominant_species` | class | modal tree species by stand area within buffer |
-| MESE QURULUSU | `mean_crown_density` | 0.1–1.0 | area-weighted canopy closure |
-| MESE QURULUSU | `pct_old_growth` | fraction | stands with age class ≥ 80 yr / total area |
-| WorldPop + OSM | `human_activity_score` | — | population_density × road_density_km_per_km² |
-| NASA FIRMS | `days_since_last_fire` | days | days elapsed since last hotspot in city buffer |
-| NASA FIRMS | `fire_count_30d` | count | FIRMS hotspot count in prior 30-day window |
-
-### Extended Features (Pending Data Acquisition)
-
-| Source | Name | Notes |
-|--------|------|-------|
-| ERA5-Land | `sm_surface_m3m3`, `sm_rootzone_m3m3` | Copernicus CDS registration required |
-| MODIS MOD13Q1 | `ndvi`, `evi`, `ndwi`, `ndwi_anomaly` | Live fuel moisture proxy; NASA Earthdata / AppEEARS |
-| SRTM DEM | `elevation_m`, `slope_deg`, `northness`, `tpi` | Terrain features; OpenTopography one-time download |
-| SMAP L4 | `sm_rootzone_m3m3` | Daily rootzone moisture; NASA Earthdata pipeline |
-| Blitzortung | `lightning_days_per_month` | Natural ignition climatology; CSV download |
+| ID | Task | Description | Owner(s) | Notebook |
+|----|------|-------------|----------|----------|
+| T1 | Weather Data Ingestion | Historical hourly weather (Open-Meteo Archive), live 16-day forecast, HTTP caching & retry logic | Asif, Raul | NB1 |
+| T2 | Fire Labels & Geography | NASA FIRMS archive parsing, daily fire-label normalization (20 km buffer), Open-Elevation terrain fetch | Raul | NB1 |
+| T3 | Exploratory Data Analysis | Per-city quality audit, descriptive statistics, distribution analysis, correlation heatmaps, seasonal decomposition | Ilaha | NB2 |
+| T4 | Fire-Weather Analysis | Fire-day vs. non-fire-day comparison per city, Welch's t-test for significance, feature–fire correlation ranking | Nurana | NB2 |
+| T5 | Weather Forecasting Ensemble | Prophet + SARIMA + XGBoost stacking per city per feature, non-negative SLSQP weight optimization, 30-day hourly predictions | Aysu | NB3 |
+| T6 | FWI Feature Engineering | FFMC, DMC, DC, ISI, BUI, FWI index computation; dry-spell tracking; rolling rain/temperature/humidity aggregates | Ilaha | NB2 |
+| T7 | Temporal Feature Engineering | Lag features (1–14 day), rolling statistics (7/14/30 day), cyclical calendar encodings, seasonal flags | Nurana | NB2 |
+| T8 | Wildfire Prediction & Evaluation | XGBoost classifier with isotonic calibration, PR-AUC evaluation, operational threshold selection, 30-day risk scoring | Asif, Aysu | NB4 |
+| T9 | Data Quality & Outlier Detection | IQR-based outlier analysis per city, missing-value audit, data integrity validation | Ilaha, Nurana | NB2 |
+| T10 | Presentation Design & Delivery | Slide deck creation, narrative structure, visual design, rehearsal, final presentation | Raul | — |
+| T11 | Documentation | README, code comments, pipeline documentation, reproducibility guide | Raul | — |
+| T12 | Geospatial Visualization | Folium risk maps (date-selectable), Plotly heatmaps, city-level fire-risk timelines, hypothesis report formatting | Aysu | NB3, NB4 |
 
 ---
 
-## Horizon
+## 3. 10-Day Project Timeline
 
-**t+1 to t+30 days** — daily wildfire risk scores and multi-target weather forecasts.
-
-Direct multi-horizon models are trained independently at checkpoints **h = {1, 3, 7, 14, 30}**, eliminating the recursive error accumulation inherent in autoregressive approaches (a 0.5 °C/step error compounds to ≈15 °C drift at h=30). Intermediate horizons (2, 4–6, 8–13, 15–29 days) are piecewise-linearly interpolated between checkpoint forecasts, preserving temporal monotonicity without architectural complexity.
+| Day | Phase | Milestones | Team Focus |
+|-----|-------|-----------|------------|
+| **1** | Data Collection | Open-Meteo API integration, FIRMS archive loading, legacy CSV fallback | Asif, Raul |
+| **2** | Data Collection | Static geography fetch, fire-label normalization, `master_daily.parquet` finalized | Asif, Raul |
+| **3** | EDA & Feature Engineering | Per-city quality audit, descriptive statistics, distribution analysis | Ilaha, Nurana |
+| **4** | EDA & Feature Engineering | Correlation analysis, seasonal decomposition, fire-weather comparison (t-tests) | Ilaha, Nurana, Aysu |
+| **5** | Feature Engineering | FWI indices, lag/rolling features, calendar encodings; `engineered_daily.parquet` finalized | Ilaha, Nurana |
+| **6** | ML — Weather Forecasting | Prophet + SARIMA + XGBoost stacking ensemble per city; `phase3_weather_hourly_30d.parquet` | Aysu |
+| **7** | ML — Wildfire Prediction | XGBoost fire classifier, isotonic calibration, evaluation metrics | Asif, Aysu |
+| **8** | Hypothesis Testing & Visualization | Automated hypothesis generation, Folium risk maps, Plotly dashboards | Aysu, Asif |
+| **9** | Integration & Presentation Prep | End-to-end pipeline validation, slide deck design, narrative drafting | All team |
+| **10** | **Presentation** | Final rehearsal and delivery | All team (Raul leads) |
 
 ---
 
-## Dataset
-
-### Data Source Catalog
-
-| # | Source | Format | Resolution | Period | Status | Used For |
-|---|--------|--------|------------|--------|--------|----------|
-| 1 | Open-Meteo Archive | CSV | Hourly + daily, 16 cities | 2020–present | ✅ Collected | Core weather features & forecast targets |
-| 2 | NASA FIRMS VIIRS-SNPP | CSV | ~375 m points | 2020–2025 | ✅ Collected | Wildfire binary labels + count targets |
-| 3 | ESA WorldCover | GeoTIFF | 10 m | 2020 | ✅ Collected | Land cover classification per city buffer |
-| 4 | WorldPop | GeoTIFF | 100 m, annual | 2020–2026 | ✅ Collected | Population density proxy |
-| 5 | OSM Road Network | PBF | 1:10,000 | Static | ✅ Collected | Road density / human access proxy |
-| 6 | Azerbaycan.kmz (forest boundary) | KMZ/KML | Vector | Static | ✅ Collected (43 MB) | National forest fuel polygon mask |
-| 7 | MESE QURULUSU (forest inventory) | KMZ/Vector | Stand-level | Static | ✅ Collected | Species, crown density, age class per stand |
-| 8 | Canadian FWI System | Computed | Daily, 16 cities | 2020–present | ⚙️ Computable | FFMC, DMC, DC, ISI, BUI, FWI, DSR |
-| 9 | SPEI / SPI Drought Indices | Computed | Monthly, 16 cities | 2020–present | ⚙️ Computable | Standardized drought severity indices |
-| 10 | ERA5-Land (Copernicus CDS) | NetCDF→CSV | 0.1°, daily | 2001–present | ⏳ Pending | Soil moisture, evapotranspiration, LAI |
-| 11 | FIRMS Extended (MODIS + NOAA20) | CSV | ~375 m–1 km | 2001–2025 | ⏳ Pending | Extended 25-year fire history for training |
-| 12 | MODIS MCD64A1 Burned Area | HDF5→CSV | 500 m, monthly | 2001–present | ⏳ Pending | Actual burned area per fire event |
-| 13 | MODIS MOD13Q1 (EVI + NDWI) | HDF5→CSV | 250 m, 16-day | 2001–present | ⏳ Pending | Live fuel moisture, vegetation stress index |
-| 14 | SRTM DEM | GeoTIFF | 30 m | Static | ⏳ Pending | Slope, aspect, northness, topographic position |
-| 15 | SMAP L4 Soil Moisture | HDF5→CSV | 9 km, daily | 2015–present | ⏳ Pending | Surface and rootzone soil moisture |
-| 16 | Blitzortung Lightning | CSV | ~10 km | 2020–2025 | ⏳ Pending | Natural ignition climatology per city-month |
-
-**Legend:** ✅ Collected and stored · ⚙️ Derivable from existing data — no new API required · ⏳ Pending acquisition
-
-### Pipeline Architecture
+## 4. Pipeline Architecture
 
 ```
-Phase 1 — Ingestion      data/raw/ ──────────────────► data/interim/
-Phase 2 — Weather        data/interim/ ─────────────► HGBR / XGBoost forecast models
-Phase 3 — Climate        weather_daily_clean.csv ────► Mann-Kendall trends + anomaly reports
-Phase 4 — Wildfire       wildfire_features.csv ──────► HGBC classifier + HGBR-Poisson regressor
-Phase 5 — API Layer      model outputs ──────────────► FastAPI /weather /wildfire /insights /health
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         ARIAN Pipeline Flow                             │
+│                                                                         │
+│  ┌──────────────┐   ┌──────────────────┐   ┌─────────────────────────┐ │
+│  │   NB1        │   │   NB2            │   │   NB3                   │ │
+│  │   Data       │──▶│   EDA &          │   │   Weather Forecasting   │ │
+│  │   Ingestion  │   │   Feature Eng.   │   │   (Prophet+SARIMA+XGB)  │ │
+│  └──────┬───────┘   └──────────────────┘   └───────────┬─────────────┘ │
+│         │                                              │               │
+│         │           weather_hourly.parquet              │               │
+│         ├──────────────────────────────────────────────▶│               │
+│         │                                              │               │
+│         │  master_daily.parquet                         │               │
+│         │  fires_daily.parquet                          ▼               │
+│         │  static_geography.parquet      phase3_weather_hourly_30d      │
+│         │                                              │               │
+│         │         ┌────────────────────────────────────┐│               │
+│         └────────▶│   NB4                              ││               │
+│                   │   Wildfire Prediction &             │◀──────────────┘ │
+│                   │   Hypothesis Testing               │               │
+│                   │   (XGBoost + Calibration)           │               │
+│                   └────────────┬───────────────────────┘               │
+│                                │                                       │
+│                                ▼                                       │
+│                   phase4_wildfire_hourly_30d.parquet                    │
+│                   Risk Maps · Dashboards · Hypotheses                  │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Strict directional dependency:** Weather feeds climate analysis and wildfire prediction. No circular dependencies exist in the pipeline. All uncertainty propagates in one direction only.
+---
 
-### Quick Start
+## 5. Notebook Descriptions
+
+### NB1 — Data Ingestion (`01_Data_Ingestion.ipynb`)
+
+| Aspect | Detail |
+|--------|--------|
+| **Purpose** | Collect, unify, and persist all raw data for the pipeline |
+| **Weather Source** | Open-Meteo Archive API (ERA5-Land, hourly, 2012–present) + 16-day live forecast |
+| **Weather Variables** | Temperature, humidity, rain, wind speed/direction, pressure, solar radiation, soil temperature, soil moisture (9 features) |
+| **Fire Source** | NASA FIRMS CSVs (MODIS C6.1, SUOMI-NPP VIIRS, J1 VIIRS, J2 VIIRS) |
+| **Fire Normalization** | Binary daily label per city within a 20 km buffer radius |
+| **Geography** | Open-Elevation API + derived slope; land-cover and population from supplementary CSVs |
+| **Fallback Logic** | Local parquet cache → legacy `merged.csv` → API (with retry/rate-limit handling) |
+| **Outputs** | `master_daily.parquet` (36,928 rows × 29 cols), `weather_hourly.parquet` (886K+ rows), `fires_daily.parquet`, `cities.parquet`, `static_geography.parquet` |
+| **Runtime** | ~5–15 min (cached) |
+
+### NB2 — EDA & Data Engineering (`02_Weather_Forecasting.ipynb`)
+
+| Aspect | Detail |
+|--------|--------|
+| **Purpose** | Comprehensive city-by-city analysis and feature engineering |
+| **Quality Audit** | Per-city missing-value report across all 12 weather columns |
+| **Descriptive Stats** | Mean, std, quartiles, skewness, kurtosis per city per feature |
+| **Visualizations** | Boxplots, histograms, correlation heatmaps, seasonal decomposition, monthly time series |
+| **Fire-Weather Analysis** | Welch's t-test comparing fire-day vs. non-fire-day weather per city (111/192 tests significant) |
+| **Feature Engineering** | FWI family (FFMC, DMC, DC, ISI, BUI, FWI), dry-spell tracking, lag features (1–14 day), rolling stats (7/14/30 day), cyclical calendar encodings |
+| **Outlier Detection** | IQR-based per-city per-feature outlier counts |
+| **Outputs** | `engineered_daily.parquet` (83,392 rows × 90 cols), per-city profiles CSV, correlation heatmaps, fire comparison CSV |
+| **Runtime** | ~3–5 min |
+
+### NB3 — Weather Prediction (`03_Fire_Risk_Bridge.ipynb`)
+
+| Aspect | Detail |
+|--------|--------|
+| **Purpose** | Forecast all 9 weather features hourly for 30 days using a stacking ensemble |
+| **Models** | **Prophet** (yearly/weekly/daily seasonality, Azerbaijan holidays), **SARIMA** (downsampled 6-hourly for tractability), **XGBoost** (recursive multi-step with lag/rolling features) |
+| **Stacking** | Non-negative weight optimization via SLSQP on a 3-day validation window |
+| **Scale** | 144 model bundles (16 cities × 9 features), 7-day test holdout for evaluation |
+| **Visualization** | Interactive Folium map with date-selectable layers, temperature-coded city markers |
+| **Outputs** | `phase3_weather_hourly_30d.parquet` (11,520 rows), `phase3_weather_leaderboard.csv`, `phase3_weather_map.html` |
+| **Runtime** | ~60–120 min |
+
+### NB4 — Wildfire Prediction & Hypothesis Testing (`04_Evaluation_and_Geospatial.ipynb`)
+
+| Aspect | Detail |
+|--------|--------|
+| **Purpose** | Train a fire classifier, score the 30-day forecast, and generate automated hypotheses |
+| **Classifier** | XGBoost (1500 estimators, early stopping) with isotonic calibration via `FrozenEstimator` |
+| **Training Data** | 2M+ hourly observations with 33 features (weather + geography + temporal + FWI) |
+| **Evaluation** | PR-AUC, ROC-AUC, F1/Precision/Recall at operational threshold; 85/15 time-respecting split |
+| **Risk Scoring** | 30-day hourly fire-risk probabilities with 4-tier classification (Low / Moderate / High / Extreme) |
+| **Hypothesis Testing** | 5 automated hypotheses: rainfall vs. last year, rainfall vs. decade, wildfire frequency change, temperature change, humidity change |
+| **Visualizations** | Folium risk map (date-selectable + heatmap layers), Plotly City × Date heatmap, per-city hourly risk timelines |
+| **Outputs** | `phase4_wildfire_hourly_30d.parquet` (11,520 rows), `phase4_wildfire_scores.csv`, `phase4_hypotheses.csv`, `phase4_risk_map.html`, `phase4_xgb_fire.joblib` |
+| **Runtime** | ~5–10 min |
+
+---
+
+## 6. Folder Structure
+
+```
+ARIAN_ASIF/
+├── notebooks/                            Run in order: 01 → 02 → 03 → 04
+│   ├── 01_Data_Ingestion.ipynb           Phase 1 — Data collection & unification
+│   ├── 02_Weather_Forecasting.ipynb      Phase 2 — EDA & feature engineering
+│   ├── 03_Fire_Risk_Bridge.ipynb         Phase 3 — Weather forecasting ensemble
+│   └── 04_Evaluation_and_Geospatial.ipynb Phase 4 — Wildfire prediction & viz
+│
+├── data/
+│   ├── raw/
+│   │   ├── firms/                        NASA FIRMS sensor archives
+│   │   │   ├── modis_c61/
+│   │   │   ├── suomi_viirs_c2/
+│   │   │   ├── j1_viirs_c2/
+│   │   │   └── j2_viirs_c2/
+│   │   └── legacy/                       Fallback: merged.csv + supplementary CSVs
+│   ├── processed/                        master_daily.parquet, fires_daily.parquet,
+│   │                                     engineered_daily.parquet
+│   └── reference/                        cities.parquet, static_geography.parquet
+│
+├── outputs/                              All pipeline artefacts (.csv/.parquet/.html)
+├── models/                               Trained models + manifests (.joblib/.json)
+└── README.md
+```
+
+> All files under `outputs/` and `models/` are generated programmatically — nothing is hand-edited.
+
+---
+
+## 7. Setup & Execution
+
+### Google Colab
+
+1. Upload the project folder to your Google Drive root (→ `/MyDrive/ARIAN_Data/`)
+2. Open any notebook in Colab
+3. Run the first cell — it auto-mounts Drive, detects the project root, and creates directories
+4. Execute cells top-to-bottom
+
+Override the project path if needed:
+```python
+import os; os.environ["ARIAN_ROOT"] = "/content/drive/MyDrive/path/to/ARIAN_Data"
+```
+
+### Local (JupyterLab / VS Code)
 
 ```bash
-# 1. Install dependencies
+cd ARIAN_ASIF
 pip install -r requirements.txt
-
-# 2. Compute derived datasets — no new API key required
-python compute_fire_weather_index.py
-python compute_drought_indices.py
-python fetch_seasonal_forecast.py
-
-# 3. Run full ingestion pipeline
-python generate_data.py
-
-# 4. Start the REST API
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-# Dashboard: http://localhost:8000   |   API docs: http://localhost:8000/docs
+jupyter lab notebooks/
 ```
+
+The setup cell auto-detects the project root by walking up the directory tree. Override with:
+```bash
+export ARIAN_ROOT=/absolute/path/to/project
+```
+
+### Environment Variables
+
+| Variable | Purpose |
+|----------|---------|
+| `ARIAN_ROOT` | Absolute path to project root. Overrides auto-detection. |
 
 ---
 
-## Key Definitions
+## 8. Dependencies
 
-| Term | Definition |
-|------|------------|
-| **FWI** | Canadian Fire Weather Index — six-component fire danger rating system (FFMC, DMC, DC, ISI, BUI, FWI, DSR) computed from temperature, humidity, wind speed, and rainfall. Industry standard validated across decades of fire data (Van Wagner, 1987). |
-| **FFMC** | Fine Fuel Moisture Code — moisture content of surface litter and fine fuels (0–101 scale). FFMC ≥ 82 = high; ≥ 87 = extreme fire danger. |
-| **DC** | Drought Code — moisture content of deep organic layers. DC > 300 indicates extreme drought; used as a hard threshold feature in the wildfire model. |
-| **DSR** | Daily Severity Rating — exponential FWI transformation measuring expected fire suppression difficulty. DSR > 20 = extreme operational demand. |
-| **SPEI** | Standardized Precipitation-Evapotranspiration Index — drought measure incorporating evaporative demand. SPEI ≤ −1.0: moderate drought · ≤ −1.5: severe · ≤ −2.0: extreme. `spei_3` (3-month) is the primary seasonal signal; `spei_1` captures short-term fuel dryness entering fire season. |
-| **FIRMS** | NASA Fire Information for Resource Management System — real-time and historical satellite fire hotspot detections from VIIRS-SNPP (~375 m) and MODIS (~1 km) sensors. |
-| **MESE QURULUSU** | Azerbaijani State Forest Management Inventory — stand-level polygons with species composition, crown density (0.1–1.0 in 0.1 increments), age class (20-year brackets), and RMTM administrative unit. Unique competitive advantage over open-access land-cover products. |
-| **HGBC / HGBR** | HistGradientBoostingClassifier / Regressor (scikit-learn) — primary wildfire models. Classifier uses isotonic calibration (5-fold CV) for reliable probability output; regressor uses Poisson loss to enforce non-negative fire count predictions. |
-| **AUC-ROC** | Area Under the ROC Curve — primary classifier evaluation metric. Target ≥ 0.85. Supplemented by Average Precision (target ≥ 0.55) given class imbalance. |
-| **NDWI** | Normalized Difference Water Index — (NIR − SWIR) / (NIR + SWIR). Values < −0.1 indicate vegetation water stress; < −0.3 is critical fire-risk territory. |
-| **Mann-Kendall** | Non-parametric monotonic trend test applied to annual temperature and precipitation series per city. Paired with Theil-Sen slope estimation for magnitude. |
+```
+# Core
+pandas>=2.1
+numpy
+pyarrow
+requests
+requests-cache
+retry-requests
+openmeteo-requests
+tqdm
 
-### Model Performance Targets
+# Phase 2 — EDA
+matplotlib
+seaborn
+scipy
+statsmodels
 
-**Weather Forecasting (Mean Absolute Error)**
+# Phase 3 — Forecasting
+prophet
+xgboost>=2.0
+scikit-learn>=1.4
+holidays
 
-| Target | h=1 Acceptable | h=1 Good | h=30 Acceptable | h=30 Good |
-|--------|---------------|----------|----------------|----------|
-| `temperature_2m` | ≤ 1.5 °C | ≤ 0.8 °C | ≤ 5.0 °C | ≤ 3.5 °C |
-| `wind_speed_10m` | ≤ 1.0 m/s | ≤ 0.6 m/s | — | — |
-| `rain` | ≤ 1.5 mm | ≤ 0.8 mm | — | — |
+# Phase 4 — Prediction & Visualization
+folium
+plotly
+joblib
+```
 
-**Wildfire Risk Classification & Regression**
+Each notebook installs missing packages automatically via `%pip install` in its first code cell.
 
-| Metric | Acceptable | Good |
-|--------|-----------|------|
-| AUC-ROC (classifier) | ≥ 0.75 | ≥ 0.85 |
-| Average Precision | ≥ 0.40 | ≥ 0.55 |
-| Brier Score | ≤ 0.15 | ≤ 0.10 |
-| Fire count MAE | ≤ 2.0 | ≤ 1.0 |
+---
 
-**Evaluation protocol:** Temporal split only — last 12 months held out. No shuffling. Per-city breakdowns required to identify underperforming regions. Calibration verified via reliability diagram (bins ±0.05 of diagonal).
+## 9. Cities Covered
 
+| City | Latitude | Longitude | Key Characteristics |
+|------|----------|-----------|-------------------|
+| Baku | 40.409 | 49.867 | Capital, highest urban %, highest fire rate (30.1%) |
+| Sumqayit | 40.590 | 49.669 | Industrial, coastal |
+| Ganja | 40.683 | 46.361 | Western highlands |
+| Mingachevir | 40.764 | 47.060 | Central lowlands |
+| Shirvan | 39.932 | 48.930 | Kura-Araxes lowland |
+| Lankaran | 38.752 | 48.848 | Southern subtropical |
+| Shaki | 41.198 | 47.169 | Northern foothills |
+| Nakhchivan | 39.209 | 45.412 | Exclave, arid continental |
+| Yevlakh | 40.618 | 47.150 | Central plains |
+| Quba | 41.361 | 48.526 | Northern mountainous |
+| Khachmaz | 41.464 | 48.806 | Northeastern coastal |
+| Gabala | 40.998 | 47.847 | Highest elevation (996 m), most forested (50.5%) |
+| Shamakhi | 40.630 | 48.641 | Mountain plateau |
+| Jalilabad | 39.209 | 48.299 | Southern lowlands |
+| Barda | 40.374 | 47.127 | Karabakh region |
+| Zaqatala | 41.630 | 46.643 | Northwestern, lowest fire rate (3.5%) |
+
+Fire labels are aggregated daily within a **20 km radius** of each city centroid.
+
+---
+
+## 10. Data Sources & Provenance
+
+| Source | Data | Access | Notes |
+|--------|------|--------|-------|
+| **Open-Meteo Archive** | Historical hourly weather (2012–present) | Free, no API key | ERA5-Land reanalysis; 9 variables |
+| **Open-Meteo Forecast** | 16-day ahead hourly weather | Free, no API key | Updated daily |
+| **NASA FIRMS** | Active fire detections | Free, archive CSVs | MODIS C6.1 + VIIRS C2 (3 sensors); confidence ≥ "n" (VIIRS) / ≥ 30 (MODIS) |
+| **Open-Elevation** | Terrain elevation | Free, no API key | Slope derived from 4-neighbour 1 km DEM cross |
+| **Supplementary CSVs** | Land cover %, urban %, population | Local reference files | Static per-city attributes |
+
+### Caveats
+
+- **Fire risk** represents the probability of any FIRMS-detected hotspot occurring, **not** predicted burn area
+- The classifier is calibrated with **isotonic regression**; use the operational threshold from `phase4_manifest.json`
+- Evaluate with **PR-AUC and recall at the operational threshold** — accuracy is misleading given ~10% fire-day prevalence
+- SARIMA convergence warnings during NB3 training are expected and handled gracefully via fallback models
+
+---
+
+## 11. Key Outputs & Deliverables
+
+### Data Artefacts
+
+| File | Description | Produced By |
+|------|-------------|-------------|
+| `data/processed/master_daily.parquet` | 36,928 city-day rows × 29 columns | NB1 |
+| `data/raw/weather_hourly.parquet` | 886K+ hourly weather observations | NB1 |
+| `data/processed/fires_daily.parquet` | 4,536 fire-day labels across 16 cities | NB1 |
+| `data/processed/engineered_daily.parquet` | 83,392 rows × 90 engineered features | NB2 |
+| `outputs/phase3_weather_hourly_30d.parquet` | 11,520-row 30-day hourly weather forecast | NB3 |
+| `outputs/phase4_wildfire_hourly_30d.parquet` | 11,520-row 30-day hourly fire-risk forecast | NB4 |
+
+### Interactive Visualizations
+
+| File | Description |
+|------|-------------|
+| `outputs/phase3_weather_map.html` | Folium map — predicted weather by date (temperature-coded markers) |
+| `outputs/phase4_risk_map.html` | Folium map — wildfire risk by date (4-tier color coding + heatmap) |
+| `outputs/phase4_risk_heatmap.html` | Plotly heatmap — City × Date fire risk matrix |
+| `outputs/phase4_city_timelines.html` | Plotly dashboard — hourly risk timelines per city |
+
+### ML Models & Reports
+
+| File | Description |
+|------|-------------|
+| `models/phase4_xgb_fire.joblib` | Trained & calibrated XGBoost fire classifier |
+| `models/phase4_manifest.json` | Feature order, operational threshold, test metrics |
+| `outputs/phase4_wildfire_scores.csv` | PR-AUC, ROC-AUC, F1, Precision, Recall |
+| `outputs/phase4_hypotheses.csv` | 5 automated climate-vs-fire hypotheses |
+| `outputs/phase4_feature_importance.csv` | Feature importance ranking (gain-based) |
+
+---
+
+*ARIAN — Built by the team at ADA University, 2026.*
