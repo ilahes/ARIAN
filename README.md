@@ -85,33 +85,33 @@ Runs identically on **Google Colab** and **local environments** (JupyterLab / VS
 ## 4. Pipeline Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         ARIAN Pipeline Flow                             │
-│                                                                         │
-│  ┌──────────────┐   ┌──────────────────┐   ┌─────────────────────────┐ │
-│  │   NB1        │   │   NB2            │   │   NB3                   │ │
-│  │   Data       │──▶│   EDA &          │   │   Weather Forecasting   │ │
-│  │   Ingestion  │   │   Feature Eng.   │   │   (Prophet+SARIMA+XGB)  │ │
-│  └──────┬───────┘   └──────────────────┘   └───────────┬─────────────┘ │
-│         │                                              │               │
-│         │           weather_hourly.parquet              │               │
-│         ├──────────────────────────────────────────────▶│               │
-│         │                                              │               │
-│         │  master_daily.parquet                         │               │
-│         │  fires_daily.parquet                          ▼               │
-│         │  static_geography.parquet      phase3_weather_hourly_30d      │
-│         │                                              │               │
-│         │         ┌────────────────────────────────────┐│               │
-│         └────────▶│   NB4                              ││               │
-│                   │   Wildfire Prediction &             │◀──────────────┘ │
-│                   │   Hypothesis Testing               │               │
-│                   │   (XGBoost + Calibration)           │               │
-│                   └────────────┬───────────────────────┘               │
-│                                │                                       │
-│                                ▼                                       │
-│                   phase4_wildfire_hourly_30d.parquet                    │
-│                   Risk Maps · Dashboards · Hypotheses                  │
-└─────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                         ARIAN Pipeline Flow                              │
+│                                                                          │
+│  ┌──────────────┐   ┌──────────────────┐    ┌──────────────────────────┐ │
+│  │   NB1        │   │   NB2            │    │   NB3                    │ │
+│  │   Data       │──▶│   EDA &          │    │   Weather Forecasting    │ │
+│  │   Ingestion  │   │   Feature Eng.   │    │   (Prophet+SARIMA+XGB)   │ │
+│  └──────┬───────┘   └──────────────────┘    └───────────┬────────────┬─┘ │
+│         │                                               │            │   │
+│         │           weather_hourly.parquet              │            │   │
+│         ├──────────────────────────────────────────────▶│            │   │
+│         │                                               │            │   │
+│         │  master_daily.parquet                         │            │   │
+│         │  fires_daily.parquet                          ▼            │   │
+│         │  static_geography.parquet      phase3_weather_hourly_30d   │   │
+│         │                                               │            │   │
+│         │         ┌────────────────────────────────────┐│            │   │
+│         └────────▶│   NB4                              ││            │   │
+│                   │   Wildfire Prediction &            │◀────────────┘   │
+│                   │   Hypothesis Testing               │                 │
+│                   │   (XGBoost + Calibration)          │                 │
+│                   └────────────┬───────────────────────┘                 │
+│                                │                                         │
+│                                ▼                                         │
+│                   phase4_wildfire_hourly_30d.parquet                     │
+│                   Risk Maps · Dashboards · Hypotheses                    │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
