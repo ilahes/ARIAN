@@ -526,5 +526,3 @@ Fire labels are aggregated daily within a **20 km radius** of each city centroid
 Evaluated on a temporal holdout (last 30 days for daily, last 168 hours for hourly).
 
 ---
-
-*ARIAN — Built by the team at ADA University, 2025.*
